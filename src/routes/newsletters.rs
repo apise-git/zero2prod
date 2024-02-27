@@ -1,14 +1,18 @@
 use crate::domain::SubscriberEmail;
 use crate::email_client::EmailClient;
 use crate::routes::error_chain_fmt;
-use actix_web::http::header::{HeaderMap, HeaderValue};
 use actix_web::http::StatusCode;
-use actix_web::HttpRequest;
 use actix_web::HttpResponse;
 use actix_web::{web, ResponseError};
 use anyhow::Context;
-use secrecy::Secret;
+use chrono::format;
+use reqwest::header;
 use sqlx::PgPool;
+
+use crate::authentication::{validate_credentials, AuthError, Credentials};
+use actix_web::http::header::{HeaderMap, HeaderValue};
+use actix_web::HttpRequest;
+use secrecy::Secret;
 
 struct ConfirmedSubscriber {
     email: SubscriberEmail,
@@ -44,14 +48,31 @@ pub struct Content {
     text: String,
 }
 
+#[tracing::instrument(
+    name = "Publish a newsletter",
+    skip(body, pool, email_client, request),
+    fields(
+       username = tracing::field::Empty,
+       user_id = tracing::field::Empty
+    )
+)]
 pub async fn publish_newsletter(
     body: web::Json<BodyData>,
     pool: web::Data<PgPool>,
     email_client: web::Data<EmailClient>,
     request: HttpRequest,
 ) -> Result<HttpResponse, PublishError> {
-    let _credentials = basic_authentication(request.headers())
-    .map_err(PublishError::AuthError)?;
+    let credentials = basic_authentication(request.headers()).map_err(PublishError::AuthError)?;
+
+    tracing::Span::current().record("username", &tracing::field::display(&credentials.username));
+
+    let user_id = validate_credentials(credentials, &pool)
+        .await
+        .map_err(|e| match e {
+            AuthError::InvalidCredentials(_) => PublishError::AuthError(e.into()),
+            AuthError::UnexpectedError(_) => PublishError::UnexpectedError(e.into()),
+        })?;
+
     let subscribers = get_confirmed_subscribers(&pool).await?;
     for subscriber in subscribers {
         match subscriber {
@@ -77,11 +98,6 @@ pub async fn publish_newsletter(
         }
     }
     Ok(HttpResponse::Ok().finish())
-}
-
-struct Credentials {
-    username: String,
-    password: Secret<String>,
 }
 
 fn basic_authentication(headers: &HeaderMap) -> Result<Credentials, anyhow::Error> {
@@ -132,10 +148,19 @@ impl std::fmt::Debug for PublishError {
 }
 
 impl ResponseError for PublishError {
-    fn status_code(&self) -> StatusCode {
+    fn error_response(&self) -> HttpResponse {
         match self {
-            PublishError::UnexpectedError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            PublishError::AuthError(_)=> StatusCode::UNAUTHORIZED,
+            PublishError::UnexpectedError(_) => {
+                HttpResponse::new(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+            PublishError::AuthError(_) => {
+                let mut response = HttpResponse::new(StatusCode::UNAUTHORIZED);
+                let header_value = HeaderValue::from_str(r#"Basic realm="publish""#).unwrap();
+                response
+                    .headers_mut()
+                    .insert(header::WWW_AUTHENTICATE, header_value);
+                response
+            }
         }
     }
 }

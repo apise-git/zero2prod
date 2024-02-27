@@ -30,11 +30,17 @@ tracing-actix-web = "0.7.*"
 serde-aux= "4.2.0"
 unicode-segmentation = "1.10.*"
 validator ="0.16.*"
-reqwest = { version = "0.11.*", default-features = false, features = ["json", "rustls-tls"] }
 rand= {version="0.8", features=["std_rng"]}
 thiserror = "^1"
 anyhow= "^1"
 base64 = "0.13"
+argon2 ={version = "0.4", features = ["std"]}
+urlencoding = "2"
+htmlescape = "0.3"
+hmac = { version = "0.12", features = ["std"] }
+sha2 = "0.10"
+hex = "0.4"
+actix-web-flash-messages ={version = "0.4.2", features = ["cookie"]}
 
 [dev-dependencies]
 once_cell = "1"
@@ -60,3 +66,8 @@ features = [
 "chrono",
 "migrate",
 ]
+
+[dependencies.reqwest]
+version = "0.11"
+default_features = false
+features=["json", "rustls-tls","cookies"]
