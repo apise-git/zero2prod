@@ -1,10 +1,10 @@
 use crate::startup::HmacSecret;
 use actix_web::cookie::{time::Duration, Cookie};
 use actix_web::{http::header::ContentType, web, HttpRequest, HttpResponse};
+use actix_web_flash_messages::{IncomingFlashMessages, Level};
 use chrono::format;
 use hmac::{Hmac, Mac};
 use secrecy::ExposeSecret;
-use actix_web_flash_messages::{IncomingFlashMessages, Level};
 use std::fmt::Write;
 
 #[derive(serde::Deserialize)]

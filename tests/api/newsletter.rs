@@ -167,7 +167,7 @@ async fn non_existing_user_is_reject() {
 
     assert_eq!(401, response.status().as_u16());
     assert_eq!(
-        r#"Basic realm = "publish""#,
+        r#"Basic realm="publish""#,
         response.headers()["WWW-Authenticate"]
     );
 }
